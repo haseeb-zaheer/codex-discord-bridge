@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from codex_discord_bridge.discord_bot import ProgressMessenger, relative_display
+from codex_discord_bridge.discord_bot import ProgressMessenger, relative_display, short_id
 
 
 def test_relative_display_root(tmp_path: Path) -> None:
@@ -12,6 +12,10 @@ def test_relative_display_child(tmp_path: Path) -> None:
     child.mkdir()
 
     assert relative_display(tmp_path, child) == "child"
+
+
+def test_short_id_uses_first_eight_chars() -> None:
+    assert short_id("019e6c95-765e-7d13-83f9-fb8c9fca807c") == "019e6c95"
 
 
 class FakeChannel:

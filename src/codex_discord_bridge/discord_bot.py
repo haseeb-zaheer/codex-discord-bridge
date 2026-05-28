@@ -129,7 +129,10 @@ class CodexDiscordBot(discord.Client):
             log_path=result.log_path,
         )
         self.store.set_active(message.author.id, message.channel.id, result.session_id)
-        header = f"Active session `{short_id(result.session_id)}` as `{alias}`."
+        header = (
+            f"Active session `{short_id(result.session_id)}` as `{alias}`.\n"
+            f"Full ID: `{result.session_id}`"
+        )
         await send_chunks(message.channel, format_result(header, result.final_message, result.log_path, result.ok))
 
     async def _send_to_active(
@@ -203,7 +206,9 @@ class CodexDiscordBot(discord.Client):
         for session in sessions:
             marker = "*"
             lines.append(
-                f"{marker} `{short_id(session.id)}` `{session.alias}` {session.status} `{session.cwd}`"
+                f"{marker} `{short_id(session.id)}` `{session.alias}` {session.status}\n"
+                f"  Full ID: `{session.id}`\n"
+                f"  CWD: `{session.cwd}`"
             )
         await send_chunks(message.channel, "\n".join(lines))
 
@@ -213,7 +218,11 @@ class CodexDiscordBot(discord.Client):
             await message.channel.send(f"No session found for `{identifier}`.")
             return
         self.store.set_active(message.author.id, message.channel.id, session.id)
-        await message.channel.send(f"Active session is now `{short_id(session.id)}` in `{session.cwd}`.")
+        await message.channel.send(
+            f"Active session is now `{short_id(session.id)}`.\n"
+            f"Full ID: `{session.id}`\n"
+            f"CWD: `{session.cwd}`"
+        )
 
     async def _stop_session(self, message: discord.Message, identifier: str) -> None:
         session = self.store.find_session(message.author.id, identifier)
@@ -230,6 +239,7 @@ class CodexDiscordBot(discord.Client):
             return
         await message.channel.send(
             f"Active `{short_id(session.id)}` `{session.alias}`: {session.status}\n"
+            f"Full ID: `{session.id}`\n"
             f"CWD: `{session.cwd}`\n"
             f"Model: `{session.model or 'default'}`"
         )
