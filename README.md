@@ -149,17 +149,3 @@ python3 -m py_compile $(find src -name '*.py' -print)
 This bot is effectively remote control for local Codex. Keep it DM-only,
 restrict `DISCORD_ALLOWED_USER_IDS`, keep `CODEX_BRIDGE_ROOT` narrow, and do
 not commit `.env`, logs, or the SQLite database.
-
-## Public Repo Workflow
-
-Be careful when preparing changes for this repository. It is public.
-
-- Do not work directly on `main`.
-- Use a separate local `develop` branch for active changes.
-- Keep `develop` local unless a change has been explicitly approved for publication.
-- Before merging into `main`, run tests and perform a security/publication audit.
-- Only merge `develop` into `main` after approval.
-- After merging, push `main` only when the publish candidate has been reviewed.
-
-Never force-add ignored runtime files such as `.env`, logs, SQLite databases,
-local agent notes, virtualenvs, or caches.
