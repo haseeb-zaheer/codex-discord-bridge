@@ -6,7 +6,7 @@ import re
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Awaitable, Callable, Iterable
 
 UUID_RE = re.compile(
     r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b",
@@ -25,6 +25,9 @@ class CodexRunResult:
     @property
     def ok(self) -> bool:
         return self.returncode == 0
+
+
+ProgressCallback = Callable[[str], Awaitable[None]]
 
 
 class CodexRunner:
@@ -94,11 +97,34 @@ class CodexRunner:
         *,
         log_path: Path,
         fallback_session_id: str | None = None,
+        on_progress: ProgressCallback | None = None,
     ) -> CodexRunResult:
-        stdout, stderr = await proc.communicate()
-        raw_lines = stdout.decode(errors="replace").splitlines()
-        stderr_text = stderr.decode(errors="replace").strip()
-        log_path.write_text("\n".join(raw_lines) + ("\n" if raw_lines else ""))
+        raw_lines: list[str] = []
+        stderr_task = (
+            asyncio.create_task(proc.stderr.read())
+            if proc.stderr is not None
+            else None
+        )
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with log_path.open("w", encoding="utf-8") as log_file:
+            if proc.stdout is not None:
+                while True:
+                    raw_line = await proc.stdout.readline()
+                    if not raw_line:
+                        break
+                    line = raw_line.decode(errors="replace").rstrip("\n")
+                    raw_lines.append(line)
+                    log_file.write(line + "\n")
+                    log_file.flush()
+                    if on_progress:
+                        progress = progress_message_from_line(line)
+                        if progress:
+                            await on_progress(progress)
+
+            await proc.wait()
+
+        stderr_bytes = await stderr_task if stderr_task is not None else b""
+        stderr_text = stderr_bytes.decode(errors="replace").strip()
         session_id = fallback_session_id or _extract_session_id(raw_lines) or uuid.uuid4().hex
         final_message = _extract_final_message(raw_lines)
         if not final_message and stderr_text:
@@ -159,6 +185,82 @@ def build_resume_command(
     cmd.append(session_id)
     cmd.append(prompt)
     return cmd
+
+
+def progress_message_from_line(line: str) -> str | None:
+    try:
+        event = json.loads(line)
+    except json.JSONDecodeError:
+        return None
+
+    event_type = event.get("type")
+    if event_type == "turn.started":
+        return "Codex turn started."
+    if event_type == "thread.started":
+        thread_id = event.get("thread_id")
+        return f"Session `{str(thread_id)[:8]}` connected." if thread_id else "Session connected."
+
+    item = event.get("item")
+    if not isinstance(item, dict):
+        return None
+
+    item_type = item.get("type")
+    if item_type == "todo_list":
+        return _todo_progress(item)
+    if item_type == "command_execution":
+        command = item.get("command") or item.get("cmd")
+        if isinstance(command, list):
+            command = " ".join(str(part) for part in command)
+        if isinstance(command, str) and command.strip():
+            return f"Running: `{_shorten(command.strip(), 180)}`"
+    if item_type == "file_change":
+        path = item.get("path") or item.get("file")
+        if isinstance(path, str) and path.strip():
+            return f"Editing: `{_shorten(path.strip(), 180)}`"
+        return "Editing files."
+    if item_type == "agent_message":
+        text = item.get("text")
+        if isinstance(text, str) and text.strip():
+            return _brief_agent_update(text)
+
+    return None
+
+
+def _todo_progress(item: dict) -> str | None:
+    items = item.get("items")
+    if not isinstance(items, list) or not items:
+        return None
+    completed = sum(1 for todo in items if isinstance(todo, dict) and todo.get("completed"))
+    total = len(items)
+    first_open = next(
+        (
+            todo.get("text")
+            for todo in items
+            if isinstance(todo, dict) and not todo.get("completed") and isinstance(todo.get("text"), str)
+        ),
+        None,
+    )
+    if first_open:
+        return f"Plan progress: {completed}/{total} done. Next: {_shorten(first_open, 140)}"
+    return f"Plan progress: {completed}/{total} done."
+
+
+def _brief_agent_update(text: str) -> str | None:
+    stripped = text.strip()
+    if not stripped:
+        return None
+    first_line = next((line.strip() for line in stripped.splitlines() if line.strip()), "")
+    if not first_line:
+        return None
+    if len(stripped) > 700:
+        return f"Codex update: {_shorten(first_line, 180)}"
+    return None
+
+
+def _shorten(text: str, limit: int) -> str:
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1].rstrip() + "..."
 
 
 def _extract_session_id(lines: Iterable[str]) -> str | None:

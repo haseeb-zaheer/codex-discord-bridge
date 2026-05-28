@@ -5,6 +5,7 @@ from codex_discord_bridge.codex_runner import (
     _extract_session_id,
     build_resume_command,
     build_start_command,
+    progress_message_from_line,
 )
 
 
@@ -71,3 +72,23 @@ def test_build_resume_command_places_options_before_prompt() -> None:
         "123e4567-e89b-12d3-a456-426614174000",
         "continue",
     ]
+
+
+def test_progress_message_from_turn_started() -> None:
+    assert progress_message_from_line('{"type":"turn.started"}') == "Codex turn started."
+
+
+def test_progress_message_from_todo_list() -> None:
+    line = (
+        '{"type":"item.started","item":{"type":"todo_list","items":['
+        '{"text":"Read files","completed":true},'
+        '{"text":"Run tests","completed":false}]}}'
+    )
+
+    assert progress_message_from_line(line) == "Plan progress: 1/2 done. Next: Run tests"
+
+
+def test_progress_message_from_large_agent_message() -> None:
+    line = '{"type":"item.completed","item":{"type":"agent_message","text":"' + ("hello " * 200) + '"}}'
+
+    assert progress_message_from_line(line) == "Codex update: hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello..."

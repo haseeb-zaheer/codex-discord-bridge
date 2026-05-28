@@ -129,6 +129,11 @@ Example:
 codex -new example-project inspect the repo and make a plan
 ```
 
+While Codex is running, the bridge sends concise progress updates such as
+session start, plan/todo progress, command execution, and file-edit notices.
+The full raw Codex JSONL stream is still saved locally in `logs/`, and the
+final Codex response is sent when the turn completes.
+
 ## Development
 
 ```bash

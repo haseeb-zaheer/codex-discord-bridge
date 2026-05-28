@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 import discord
@@ -14,6 +15,7 @@ from .state import Session, StateStore
 
 DISCORD_LIMIT = 2000
 BRIDGE_LIMIT = 1800
+PROGRESS_INTERVAL_SECONDS = 4.0
 
 
 class CodexDiscordBot(discord.Client):
@@ -161,8 +163,9 @@ class CodexDiscordBot(discord.Client):
     async def _run_new(self, message: discord.Message, key: tuple[int, int], cwd: Path, prompt: str, model: str | None):
         proc, log_path = await self.runner.start(cwd=cwd, prompt=prompt, model=model)
         self._active_processes[key] = proc
+        progress = ProgressMessenger(message.channel)
         try:
-            return await self.runner.collect(proc, log_path=log_path)
+            return await self.runner.collect(proc, log_path=log_path, on_progress=progress.send)
         finally:
             self._active_processes.pop(key, None)
 
@@ -180,8 +183,14 @@ class CodexDiscordBot(discord.Client):
             model=session.model,
         )
         self._active_processes[key] = proc
+        progress = ProgressMessenger(message.channel)
         try:
-            return await self.runner.collect(proc, log_path=log_path, fallback_session_id=session.id)
+            return await self.runner.collect(
+                proc,
+                log_path=log_path,
+                fallback_session_id=session.id,
+                on_progress=progress.send,
+            )
         finally:
             self._active_processes.pop(key, None)
 
@@ -313,3 +322,30 @@ def relative_display(root: Path, path: Path) -> str:
     except ValueError:
         return str(path)
     return "." if str(relative) == "." else str(relative)
+
+
+class ProgressMessenger:
+    def __init__(
+        self,
+        channel: discord.abc.Messageable,
+        *,
+        interval_seconds: float = PROGRESS_INTERVAL_SECONDS,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self.channel = channel
+        self.interval_seconds = interval_seconds
+        self.clock = clock
+        self.last_sent_at = 0.0
+        self.last_message = ""
+
+    async def send(self, message: str) -> None:
+        text = message.strip()
+        if not text or text == self.last_message:
+            return
+        now = self.clock()
+        important = text.startswith(("Running:", "Editing:", "Codex turn started", "Session "))
+        if not important and now - self.last_sent_at < self.interval_seconds:
+            return
+        self.last_sent_at = now
+        self.last_message = text
+        await self.channel.send(text[:BRIDGE_LIMIT])
