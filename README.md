@@ -107,6 +107,20 @@ codex -folders [prefix]
 codex -help
 ```
 
+Slash aliases:
+
+```text
+/plan [topic]
+/status
+/model <model>
+/cancel
+/help
+```
+
+`/plan` is handled as text-only planning mode for Discord. It asks Codex not to
+use terminal-only interactive prompts and to ask follow-up questions directly in
+plain text instead.
+
 Any other DM is sent to the active Codex session.
 
 Example:

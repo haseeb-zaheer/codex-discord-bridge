@@ -40,13 +40,33 @@ codex -retry
 codex -folders [prefix]
 codex -help
 
+Slash aliases:
+/plan [topic]
+/status
+/model <model>
+/cancel
+/help
+
 Any other DM is sent to the active Codex session."""
+
+PLAN_PROMPT_PREFIX = """Enter text-only planning mode for Discord.
+
+Important constraints:
+- Do not edit files or run mutating commands yet.
+- Do not use interactive UI prompts, numbered choice widgets, or terminal-only controls.
+- If you need input, ask the questions directly in plain text and wait for my next Discord message.
+- Produce a concrete implementation plan that can be executed later.
+
+Planning request:"""
 
 
 def parse_command(content: str) -> Command:
     text = content.strip()
     if not text:
         return Command(CommandKind.MESSAGE, prompt="")
+
+    if text.startswith("/"):
+        return _parse_slash_command(text)
 
     if not text.lower().startswith("codex "):
         return Command(CommandKind.MESSAGE, prompt=text)
@@ -101,3 +121,35 @@ def parse_command(content: str) -> Command:
         raise ValueError(f"codex {flag} does not accept extra arguments")
 
     return Command(kind)
+
+
+def _parse_slash_command(text: str) -> Command:
+    try:
+        parts = shlex.split(text)
+    except ValueError as exc:
+        raise ValueError(f"Could not parse command: {exc}") from exc
+
+    command = parts[0].lower()
+    rest = tuple(parts[1:])
+
+    if command == "/plan":
+        topic = " ".join(rest).strip() or "Make a plan for the current task."
+        return Command(CommandKind.MESSAGE, prompt=f"{PLAN_PROMPT_PREFIX}\n{topic}")
+    if command == "/status":
+        if rest:
+            raise ValueError("Usage: /status")
+        return Command(CommandKind.STATUS)
+    if command == "/model":
+        if len(rest) != 1:
+            raise ValueError("Usage: /model <model>")
+        return Command(CommandKind.MODEL, args=(rest[0],))
+    if command == "/cancel":
+        if rest:
+            raise ValueError("Usage: /cancel")
+        return Command(CommandKind.CANCEL)
+    if command == "/help":
+        if rest:
+            raise ValueError("Usage: /help")
+        return Command(CommandKind.HELP)
+
+    return Command(CommandKind.MESSAGE, prompt=text)
