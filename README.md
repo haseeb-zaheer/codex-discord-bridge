@@ -1,6 +1,10 @@
 # Codex Discord Bridge
 
-DM-only Discord bridge for running local Codex CLI sessions on this machine.
+DM-only Discord bot for starting and continuing local Codex CLI sessions from Discord.
+
+This is intended for a private, single-user workflow: you DM your bot, the bot
+starts Codex in an allowed local folder, and follow-up DMs continue the active
+Codex session.
 
 ## What It Does
 
@@ -10,9 +14,32 @@ DM-only Discord bridge for running local Codex CLI sessions on this machine.
 - Lets Codex run autonomously inside the selected folder using `workspace-write` and approval policy `never`.
 - Stores local session state in SQLite.
 
-## Setup
+## Requirements
+
+- Linux host with `systemd --user` if you want the 24/7 service.
+- Python 3.11+.
+- [`uv`](https://docs.astral.sh/uv/) for environment and package management.
+- OpenAI Codex CLI installed and authenticated on the machine.
+- A Discord application with a bot token.
+
+## Discord Bot Setup
+
+1. Create an application at <https://discord.com/developers/applications>.
+2. Open **Bot** and create/reset the bot token.
+3. Enable **Message Content Intent** under privileged gateway intents.
+4. Copy your Discord user id:
+   - Discord settings -> Advanced -> enable Developer Mode.
+   - Right-click your user profile -> Copy User ID.
+5. Invite the bot to a private server once so you can DM it.
+
+The bridge ignores server/channel messages. It only responds to DMs from
+`DISCORD_ALLOWED_USER_IDS`.
+
+## Installation
 
 ```bash
+git clone <repo-url>
+cd codex-discord-bridge
 uv venv
 uv pip install -e '.[dev]'
 cp .env.example .env
@@ -26,12 +53,42 @@ DISCORD_ALLOWED_USER_IDS=1234567890
 CODEX_BRIDGE_ROOT=/path/to/allowed/workspace
 ```
 
-The Discord bot needs the Message Content intent enabled in the Discord Developer Portal.
+Recommended local hardening:
+
+```bash
+chmod 600 .env
+```
 
 ## Run Locally
 
 ```bash
 uv run codex-discord-bridge
+```
+
+## Run 24/7 With systemd
+
+Install and start the user service:
+
+```bash
+./scripts/install_user_service.sh
+```
+
+Check status:
+
+```bash
+systemctl --user status codex-discord-bridge
+```
+
+Follow logs:
+
+```bash
+journalctl --user -u codex-discord-bridge -f
+```
+
+Restart:
+
+```bash
+systemctl --user restart codex-discord-bridge
 ```
 
 ## Discord Commands
@@ -58,27 +115,15 @@ Example:
 codex -new example-project inspect the repo and make a plan
 ```
 
-## systemd User Service
-
-Install and start:
+## Development
 
 ```bash
-./scripts/install_user_service.sh
-```
-
-Check logs:
-
-```bash
-journalctl --user -u codex-discord-bridge -f
-```
-
-Restart:
-
-```bash
-systemctl --user restart codex-discord-bridge
+uv run --extra dev pytest
+python3 -m py_compile $(find src -name '*.py' -print)
 ```
 
 ## Safety Notes
 
-This bot is effectively remote control for local Codex. Keep it DM-only, restrict
-`DISCORD_ALLOWED_USER_IDS`, and keep `CODEX_BRIDGE_ROOT` narrow.
+This bot is effectively remote control for local Codex. Keep it DM-only,
+restrict `DISCORD_ALLOWED_USER_IDS`, keep `CODEX_BRIDGE_ROOT` narrow, and do
+not commit `.env`, logs, or the SQLite database.
