@@ -1,0 +1,15 @@
+.env
+AGENTS.md
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.pyc
+*.db
+*.db-shm
+*.db-wal
+public_repo_audit.*
+logs/
+dist/
+build/
+*.egg-info/
