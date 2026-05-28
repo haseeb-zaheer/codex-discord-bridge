@@ -6,6 +6,9 @@ This is intended for a private, single-user workflow: you DM your bot, the bot
 starts Codex in an allowed local folder, and follow-up DMs continue the active
 Codex session.
 
+This is primarily a Linux-based app today. Windows support is planned for the
+future.
+
 ## What It Does
 
 - Accepts Discord DMs only from configured user ids.
